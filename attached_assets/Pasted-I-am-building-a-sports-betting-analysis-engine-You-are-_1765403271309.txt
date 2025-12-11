@@ -1,0 +1,70 @@
+I am building a sports betting analysis engine. You are my coding assistant and will write 100% of the code. I cannot code, so I need clear instructions and working code.
+
+Create a new Python project with the following structure and behaviour:
+
+PROJECT GOAL:
+Build a backend service that:
+1. Ingests historical and upcoming data for UFC, NBA, NFL, NRL and Tennis.
+2. Ingests current betting odds from available public sources (for testing, use mock data or a simple free API).
+3. Runs a probability + expected value (EV) model using historical stats and market odds.
+4. Produces a list of high-confidence, high-value betting legs for each sport.
+5. Provides an API endpoint that returns:
+    - recommended legs
+    - confidence rating
+    - value rating
+    - suggested multi targeting around $2 odds
+6. Includes a super simple web UI (HTML/JS only) that displays the recommended legs.
+
+PROJECT STRUCTURE (create these folders + files):
+
+/app
+    __init__.py
+    main.py              # FastAPI entry point
+    config.py            # API keys, settings
+    utils.py             # shared helpers
+
+/app/data_sources
+    __init__.py
+    ufc.py
+    nba.py
+    nfl.py
+    nrl.py
+    tennis.py
+    odds_api.py          # handles odds ingestion from API or mock data
+
+/app/models
+    __init__.py
+    probability.py       # implied probability, model prediction
+    expected_value.py    # EV calculation and selection logic
+
+/app/services
+    __init__.py
+    analyzer.py          # central logic: combine data & produce recommended legs
+    multi_builder.py     # builds a parlay aiming for approx $2 odds
+
+/app/ui
+    index.html
+    script.js
+    styles.css
+
+ROOT FILES:
+requirements.txt         # include fastapi, uvicorn, pandas, requests, numpy
+README.md                # basic usage instructions
+
+INITIAL FUNCTIONALITY TO IMPLEMENT NOW:
+1. A FastAPI backend running at / (root) with a health check.
+2. A /value-bets endpoint that returns a mock list of recommended bets.
+3. A basic EV formula:
+      implied_prob = 1 / decimal_odds
+      ev = (model_prob * decimal_odds) - 1
+4. A placeholder prediction model that returns static probabilities until we add real data.
+5. A simple HTML page served at /ui that fetches /value-bets and displays the results.
+
+INSTRUCTIONS:
+- Generate the entire project structure.
+- Write working code in each file.
+- Make sure the project runs immediately without errors.
+- Use mock data for now; we will add real APIs later.
+- Explain briefly how to run it.
+
+Start now by generating the project folder structure and initial working codebase.
