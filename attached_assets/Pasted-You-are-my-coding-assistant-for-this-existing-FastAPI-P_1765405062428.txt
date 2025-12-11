@@ -1,0 +1,208 @@
+You are my coding assistant for this existing FastAPI + Python betting analysis project. I still cannot code, so you must write and wire up all code changes for me.
+
+The goals of this phase are:
+
+1. Use real sports data (historical + upcoming).
+2. Use real betting odds, ideally from Sportsbet (Australia) or an Australian-friendly alternative.
+3. Suggest 10–12 high-confidence legs per week with odds in the range 1.05 to 1.25.
+4. Build a basic ML-based probability model instead of only static placeholder probabilities.
+5. Add a database for historical tracking and model training.
+6. Deploy (publish) the app so it is publicly accessible.
+7. For each suggested leg, generate a short, data-backed summary explaining *why* that leg was chosen, referencing specific stats and contextual factors.
+8. When narrowing from a larger candidate list (e.g. 40 legs) to the final 10–12, use true statistical data plus matchup knowledge and “narrative” risk factors (e.g. rivalry games, divisional matchups, players facing former clubs) to avoid legs with higher upset risk.
+
+IMPORTANT CLARIFICATION ABOUT MULTIS:
+- The app’s job is NOT to automatically build or place a multi to the value of $2.
+- Instead, the app should suggest individual legs/markets that are strong candidates to be combined into a multi that could target around $2 total odds.
+- So the output should be: “Here are 10–12 safe-ish legs this week between 1.05 and 1.25 that our model thinks are high-confidence and high value, based on data.”
+
+========================
+A. DATA & ODDS INTEGRATION
+========================
+
+1. Update the `/app/data_sources` modules (ufc.py, nba.py, nfl.py, nrl.py, tennis.py) so they no longer use only mock data. For each sport:
+   - Identify at least one free or low-cost sports data API or public data source (JSON or CSV) that can provide:
+     - Upcoming fixtures / matches.
+     - Historical results.
+     - Relevant stats for teams/players (e.g., win/loss records, points for/against, rankings, recent form).
+   - Implement functions like:
+       - `get_upcoming_events(limit: int = 50)`
+       - `get_historical_results(start_date, end_date)`
+       - `get_team_or_player_stats(...)`
+   - Keep these functions sport-specific in their respective files.
+
+2. In `/app/data_sources/odds_api.py`, do the following:
+
+   - First, attempt to design integration around Sportsbet (Australia) odds for UFC, NBA, NFL, NRL, Tennis.
+   - If there is no free, official Sportsbet API available, or if using it would violate terms of service, then:
+     - Choose an Australian-friendly odds provider or a global odds API that includes Australian sportsbooks or similar markets.
+     - Prioritise a solution that:
+       - Has a free tier.
+       - Provides decimal odds.
+       - Covers the sports above.
+   - Implement functions such as:
+       - `get_upcoming_odds(sport: str)` → returns a list of markets with:
+           - event_id, sport
+           - team/player names
+           - market type (e.g. head-to-head, moneyline, match winner)
+           - decimal odds
+           - bookmaker/source
+   - Make sure all integrations respect terms of service and do not use aggressive scraping that would violate websites’ rules.
+
+3. Create a central function in `odds_api.py` like:
+   - `get_upcoming_markets_for_week()` that:
+       - Fetches upcoming events for the next 7–10 days.
+       - Fetches odds across our supported sports.
+       - Normalises the data into a consistent internal format for use by the analyzer.
+
+========================
+B. DATABASE & HISTORICAL TRACKING
+========================
+
+1. Add a simple database using SQLite and an ORM such as SQLAlchemy. Create:
+   - `/app/db.py` for database setup and session handling.
+   - `/app/models_db.py` (or similar) for ORM models.
+
+2. Define tables/entities such as:
+   - `Event`:
+       - id
+       - sport
+       - league
+       - event_datetime
+       - home_team / player
+       - away_team / opponent
+   - `Market`:
+       - id
+       - event_id (FK)
+       - selection_name (e.g., “Team A to win”)
+       - market_type
+       - bookmaker
+       - decimal_odds
+       - captured_at (timestamp)
+   - `Outcome`:
+       - id
+       - event_id (FK)
+       - selection_name
+       - result (won/lost/push)
+   - `ModelPrediction`:
+       - id
+       - market_id (FK)
+       - model_name
+       - predicted_probability
+       - implied_probability
+       - ev
+       - label_high_confidence (bool)
+       - created_at
+
+3. Implement functions to:
+   - Store newly fetched odds & events into the database.
+   - Update outcomes after events are complete (for now, implement helper functions and mock or partial update logic; can be improved later).
+
+========================
+C. ML PROBABILITY MODEL
+========================
+
+1. Replace the current placeholder probability logic with a simple but real ML model in `/app/models/probability.py`:
+   - Use logistic regression or a simple tree-based model (e.g., scikit-learn) that predicts win probability for a given leg.
+   - Use historical stats + past outcomes as features, for example:
+       - Team strength metrics (win rate, point differential, rankings).
+       - Home vs away.
+       - Recent form (last N matches).
+       - Opponent strength.
+       - Head-to-head results where available.
+
+2. Implement a simple training pipeline:
+   - A script or function that:
+       - Loads historical data from the DB or API.
+       - Builds a training dataset.
+       - Trains the model.
+       - Saves the model to disk (e.g., pickle file in a `/models_artifacts` folder).
+   - On app startup, load the saved model and use it for probability predictions.
+
+3. In `/app/models/expected_value.py`:
+   - Use:
+       - `implied_prob = 1 / decimal_odds`
+       - `ev = (model_prob * decimal_odds) - 1`
+   - Only classify a leg as “high value” if:
+       - `ev` is above a positive threshold (e.g. > 0.02 or 0.03).
+       - `model_prob` is above a high-confidence threshold (e.g. > 0.80).
+   - Make thresholds configurable via `config.py`.
+
+========================
+D. VALUE LEGS LOGIC (1.05–1.25 ODDS, 40 → 12 LEGS)
+========================
+
+We want a two-stage process:
+
+**Stage 1: Numerical filtering to ~40 candidates**
+
+1. In `/app/services/analyzer.py`, create logic that:
+   - Fetches upcoming events + odds from the data sources.
+   - Uses the ML model to assign a probability to each leg.
+   - Calculates implied probability and EV for each leg.
+   - Applies hard filters:
+       - Decimal odds between 1.05 and 1.25.
+       - Model probability above a minimum threshold (e.g. >= 0.75 absolute minimum, >= 0.80 for high confidence).
+       - Positive edge over the market implied probability (e.g. model_prob at least 3 percentage points higher).
+       - EV >= a minimum threshold (e.g. 0.02+).
+   - After this step, we might have around 30–40 candidate legs per week.
+
+**Stage 2: Deep pruning from candidates down to 10–12 legs**
+
+2. For these 30–40 candidate legs, compute additional signals to assess upset risk and confidence:
+   - **Statistical stability factors**, e.g.:
+       - Strength of schedule / opponent strength.
+       - Consistency: variance in recent performance.
+       - Home/away splits.
+       - Injury indicators or absences (if data is available from the APIs).
+   - **Contextual “narrative” factors**, where they can be inferred from available data:
+       - Divisional or rivalry games (e.g. same division or known rivalry tags if available).
+       - Players/teams facing their former team (if the data/API supports linking players to previous teams).
+       - High-stakes matches (e.g. playoff games, elimination games, or games with qualification/seedings on the line).
+       - Back-to-back spots, travel disadvantage, or schedule congestion where the data supports it.
+
+3. Use these factors to:
+   - **Increase the score** of legs where:
+       - Strong favourite with consistent performance.
+       - Opponent is clearly weaker across multiple stats.
+       - No major upset signals (non-rivalry, non-elimination, non-division-decider if these can be identified).
+   - **Penalise or exclude** legs where:
+       - The matchup is a rivalry or high-variance environment.
+       - The underdog has strong recent form or specific matchup advantages.
+       - Context suggests high upset risk (e.g., favourites resting players, but only if the data/API supports this).
+
+4. Define a composite ranking score per leg, for example:
+   - Start from a base score using:
+       - model_prob
+       - EV
+       - prob_edge
+   - Apply adjustments/penalties for:
+       - Upset risk indicators (rivalry, playoff game, divisional game, former-team narratives if detectable).
+       - High variance in recent performance.
+   - Rank legs by this composite score.
+
+5. Implement a function like:
+   - `get_recommended_legs_for_week(limit: int = 12)` that:
+       - Starts from the numerically filtered candidates.
+       - Applies the deeper pruning and ranking logic.
+       - Returns the top 10–12 legs with the highest composite score and lowest upset risk.
+       - If fewer than 10 qualify strongly, return fewer rather than forcing low-quality legs.
+
+========================
+E. RATIONALE & EXPLANATIONS PER LEG
+========================
+
+1. For each recommended leg returned by `get_recommended_legs_for_week`, include a `rationale` or `summary` field, e.g.:
+
+   ```json
+   {
+     "sport": "NBA",
+     "event": "Lakers vs Spurs",
+     "selection": "Lakers to win",
+     "decimal_odds": 1.18,
+     "implied_probability": 0.847,
+     "model_probability": 0.892,
+     "ev": 0.056,
+     "confidence": "HIGH",
+     "rationale": "Lakers have won 8 of their last 10, with a +7.5 average point differential, while Spurs are 2-8 in that span with -9.3 differential. Lakers are 14-3 at home this season. Model probability (89.2%) is meaningfully higher than the market implied probability (84.7%), producing a positive EV. No major rivalry or playoff narrative flags this game as upset-prone based on available data."
+   }
