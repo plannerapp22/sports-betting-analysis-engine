@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Value Picks - Sports Betting Analysis Engine</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>All Value Picks</h1>
+            <p class="subtitle">Complete list of value betting opportunities across all sports</p>
+            <a href="/ui" class="back-link">Back to Recommended Legs</a>
+        </header>
+
+        <div class="filters">
+            <label for="sportFilter">Filter by Sport:</label>
+            <select id="sportFilter">
+                <option value="">All Sports</option>
+                <option value="nba">NBA</option>
+                <option value="nfl">NFL</option>
+            </select>
+            <label for="marketFilter">Market Type:</label>
+            <select id="marketFilter">
+                <option value="">All Markets</option>
+                <option value="moneyline">Moneyline/H2H</option>
+                <option value="prop">Player Props</option>
+                <option value="alternate">Alternate Lines</option>
+            </select>
+            <button id="refreshBtn" class="btn">Refresh Data</button>
+            <span class="last-updated" id="lastUpdated"></span>
+        </div>
+
+        <section class="all-value-bets">
+            <div class="stats-bar" id="statsBar">
+                <span id="totalBets">Total: -</span>
+                <span id="avgEV">Avg EV: -</span>
+            </div>
+            <div class="table-container">
+                <table id="betsTable" class="bets-table">
+                    <thead>
+                        <tr>
+                            <th>Sport</th>
+                            <th>Event</th>
+                            <th>Selection</th>
+                            <th>Market</th>
+                            <th>Odds</th>
+                            <th>Implied %</th>
+                            <th>Model %</th>
+                            <th>Edge</th>
+                            <th>EV</th>
+                            <th>Confidence</th>
+                            <th>Rationale</th>
+                        </tr>
+                    </thead>
+                    <tbody id="betsContainer">
+                        <tr><td colspan="11" class="loading">Loading value picks...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+        
+        <footer class="disclaimer">
+            <p><strong>How to use:</strong> Place these bets on your preferred Australian bookmaker 
+            (Sportsbet, TAB, Ladbrokes, Neds, Pointsbet, etc.) - all major AU apps offer these markets.</p>
+            <p><strong>Disclaimer:</strong> This is model-based analysis for informational purposes only. 
+            Past performance does not guarantee future results. Always bet responsibly within your means.</p>
+            <p class="timestamp" id="footerTimestamp"></p>
+        </footer>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const sportFilter = document.getElementById('sportFilter');
+        const marketFilter = document.getElementById('marketFilter');
+        const refreshBtn = document.getElementById('refreshBtn');
+        const betsContainer = document.getElementById('betsContainer');
+        const statsBar = document.getElementById('statsBar');
+
+        loadValueBets();
+
+        sportFilter.addEventListener('change', loadValueBets);
+        marketFilter.addEventListener('change', loadValueBets);
+        refreshBtn.addEventListener('click', loadValueBets);
+
+        async function loadValueBets() {
+            betsContainer.innerHTML = '<tr><td colspan="11" class="loading">Loading value picks...</td></tr>';
+            
+            try {
+                const sport = sportFilter.value;
+                let url = '/value-bets?limit=100';
+                if (sport) url += `&sport=${sport}`;
+                
+                const response = await fetch(url);
+                const data = await response.json();
+                
+                if (data.success && data.value_bets && data.value_bets.length > 0) {
+                    let bets = data.value_bets;
+                    
+                    const marketType = marketFilter.value;
+                    if (marketType === 'moneyline') {
+                        bets = bets.filter(b => !b.is_prop && !b.market_type?.includes('alternate'));
+                    } else if (marketType === 'prop') {
+                        bets = bets.filter(b => b.is_prop && !b.market_type?.includes('alternate'));
+                    } else if (marketType === 'alternate') {
+                        bets = bets.filter(b => b.market_type?.includes('alternate'));
+                    }
+                    
+                    renderBets(bets);
+                    updateStats(bets);
+                } else {
+                    betsContainer.innerHTML = '<tr><td colspan="11" class="loading">No value picks found for the selected criteria.</td></tr>';
+                    document.getElementById('totalBets').textContent = 'Total: 0';
+                    document.getElementById('avgEV').textContent = 'Avg EV: -';
+                }
+            } catch (error) {
+                betsContainer.innerHTML = '<tr><td colspan="11" class="error">Error loading value picks. Please try again.</td></tr>';
+                console.error('Error:', error);
+            }
+        }
+
+        function updateStats(bets) {
+            document.getElementById('totalBets').textContent = `Total: ${bets.length}`;
+            if (bets.length > 0) {
+                const avgEV = bets.reduce((sum, b) => sum + (b.expected_value || 0), 0) / bets.length;
+                document.getElementById('avgEV').textContent = `Avg EV: ${avgEV > 0 ? '+' : ''}${avgEV.toFixed(1)}%`;
+            }
+        }
+
+        function renderBets(bets) {
+            betsContainer.innerHTML = bets.map(bet => `
+                <tr class="bet-row ${bet.confidence === 'HIGH' ? 'high-confidence' : ''}">
+                    <td><span class="sport-badge small">${bet.sport?.toUpperCase() || '-'}</span></td>
+                    <td class="event-cell">${bet.event || '-'}</td>
+                    <td class="selection-cell"><strong>${bet.selection || '-'}</strong></td>
+                    <td class="market-cell">${formatMarketType(bet.market_type)}</td>
+                    <td class="odds-cell">$${bet.decimal_odds?.toFixed(2) || '-'}</td>
+                    <td>${bet.implied_probability?.toFixed(1) || '-'}%</td>
+                    <td>${bet.model_probability?.toFixed(1) || '-'}%</td>
+                    <td class="${(bet.model_probability - bet.implied_probability) > 0 ? 'positive' : ''}">
+                        ${((bet.model_probability || 0) - (bet.implied_probability || 0)).toFixed(1)}%
+                    </td>
+                    <td class="${bet.expected_value > 0 ? 'positive' : 'negative'}">
+                        ${bet.expected_value > 0 ? '+' : ''}${bet.expected_value?.toFixed(1) || '-'}%
+                    </td>
+                    <td><span class="confidence-badge small ${(bet.confidence || 'medium').toLowerCase()}">${bet.confidence || 'MEDIUM'}</span></td>
+                    <td class="rationale-cell">
+                        ${bet.rationale ? `
+                            <button class="rationale-btn" onclick="toggleRationale(this)">View</button>
+                            <div class="rationale-popup">${bet.rationale}</div>
+                        ` : '-'}
+                    </td>
+                </tr>
+            `).join('');
+            
+            document.getElementById('footerTimestamp').textContent = 
+                `Data last refreshed: ${new Date().toLocaleString()}`;
+        }
+
+        function formatMarketType(type) {
+            if (!type) return '-';
+            return type
+                .replace(/_/g, ' ')
+                .replace(/over under/i, 'O/U')
+                .replace(/alternate /i, 'Alt ')
+                .split(' ')
+                .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+                .join(' ');
+        }
+    });
+
+    function toggleRationale(btn) {
+        const popup = btn.nextElementSibling;
+        const allPopups = document.querySelectorAll('.rationale-popup');
+        allPopups.forEach(p => {
+            if (p !== popup) p.classList.remove('visible');
+        });
+        popup.classList.toggle('visible');
+    }
+    </script>
+</body>
+</html>
