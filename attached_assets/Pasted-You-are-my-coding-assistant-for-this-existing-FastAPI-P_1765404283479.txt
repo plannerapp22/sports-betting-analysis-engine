@@ -1,0 +1,205 @@
+You are my coding assistant for this existing FastAPI + Python betting analysis project. I still cannot code, so you must write and wire up all code changes for me.
+
+The goals of this phase are:
+
+1. Use **real sports data** (historical + upcoming).
+2. Use **real betting odds**, ideally from Sportsbet (Australia) or an Australian-friendly alternative.
+3. Suggest **10–12 high-confidence legs per week** with odds in the range **1.05 to 1.25**.
+4. Build a basic **ML-based probability model** instead of only static placeholder probabilities.
+5. Add a **database** for historical tracking and model training.
+6. **Deploy** (publish) the app so it is publicly accessible.
+
+IMPORTANT CLARIFICATION ABOUT MULTIS:
+- The app’s job is **NOT** to automatically build or place a multi to the value of $2.
+- Instead, the app should **suggest individual legs/markets** that are strong candidates to be combined into a multi that *could* target around $2 total odds.
+- So the output should be: “Here are 10–12 safe-ish legs this week between 1.05 and 1.25 that our model thinks are high-confidence and high value, based on data.”
+
+========================
+A. DATA & ODDS INTEGRATION
+========================
+
+1. Update the `/app/data_sources` modules (ufc.py, nba.py, nfl.py, nrl.py, tennis.py) so that they no longer use only mock data. For each sport, do the following:
+   - Identify at least one **free or low-cost sports data API** or public data source (JSON or CSV) that can provide:
+     - Upcoming fixtures / matches.
+     - Historical results.
+     - Relevant stats for teams/players (e.g., win/loss records, points for/against, rankings, recent form).
+   - Implement functions like:
+       - `get_upcoming_events(limit: int = 50)`
+       - `get_historical_results(start_date, end_date)`
+       - `get_team_or_player_stats(...)`
+   - Keep these functions sport-specific in their respective files.
+
+2. In `/app/data_sources/odds_api.py`, do the following:
+
+   - First, attempt to design integration around **Sportsbet (Australia)** odds for the sports we care about: UFC, NBA, NFL, NRL, Tennis.
+   - If there is **no free, official Sportsbet API** available, or if using it would violate terms of service, then:
+     - Choose an **Australian-friendly odds provider** or a global odds API that includes Australian sportsbooks or similar markets.
+     - Prioritise a solution that:
+       - Has a **free tier**.
+       - Provides decimal odds.
+       - Covers the sports above.
+   - Implement functions such as:
+       - `get_upcoming_odds(sport: str)` → returns a list of markets with:
+           - event_id, sport
+           - team/player names
+           - market type (e.g. head-to-head, moneyline, match winner)
+           - decimal odds
+           - bookmaker/source
+   - Make sure all integrations **respect terms of service** and do not use aggressive scraping that would violate websites’ rules.
+
+3. Create a central function in `odds_api.py` like:
+   - `get_upcoming_markets_for_week()` that:
+       - Fetches upcoming events for the next 7–10 days.
+       - Fetches odds across our supported sports.
+       - Normalises the data into a consistent internal format for use by the analyzer.
+
+========================
+B. DATABASE & HISTORICAL TRACKING
+========================
+
+1. Add a simple database using **SQLite** and an ORM such as **SQLAlchemy**. Create a new module, for example:
+   - `/app/db.py` for database setup and session handling.
+   - `/app/models_db.py` (or similar) for ORM models.
+
+2. Define tables/entities such as:
+   - `Event`:
+       - id
+       - sport
+       - event_datetime
+       - home_team / player
+       - away_team / opponent
+       - league
+   - `Market`:
+       - id
+       - event_id (FK)
+       - selection_name (e.g., “Team A to win”)
+       - market_type
+       - bookmaker
+       - decimal_odds
+       - captured_at (timestamp)
+   - `Outcome`:
+       - id
+       - event_id (FK)
+       - selection_name
+       - result (won/lost/push)
+   - `ModelPrediction`:
+       - id
+       - market_id (FK)
+       - model_name
+       - predicted_probability
+       - ev
+       - label_high_confidence (bool)
+       - created_at
+
+3. Implement functions to:
+   - Store newly fetched odds & events into the database.
+   - Update outcomes after events are complete (for now, implement helper functions and mock or partial update logic; we can improve later).
+
+========================
+C. ML PROBABILITY MODEL
+========================
+
+1. Replace the current placeholder probability logic with a simple but real ML model in `/app/models/probability.py`:
+   - For now, you can start with:
+       - Logistic regression or a simple tree-based model (e.g., using scikit-learn) that predicts win probability for a given leg.
+   - Use historical stats + past outcomes as features, for example:
+       - Team strength metrics (win rate, point differential, rankings).
+       - Home vs away.
+       - Recent form (last N matches).
+       - Opponent strength.
+   - Clearly structure the code into:
+       - Feature engineering functions.
+       - Training function.
+       - Prediction function.
+
+2. Implement a simple training pipeline:
+   - A script or function that:
+       - Loads historical data from the DB or API.
+       - Builds a training dataset.
+       - Trains the model.
+       - Saves the model to disk (e.g., pickle file in a `/models_artifacts` folder).
+   - In production, the API should:
+       - Load the saved model on startup.
+       - Use it to generate probabilities for each upcoming market.
+
+3. In `/app/models/expected_value.py`:
+   - Use:
+       - `implied_prob = 1 / decimal_odds`
+       - `ev = (model_prob * decimal_odds) - 1`
+   - Only classify a leg as “high value” if:
+       - `ev` is above a certain positive threshold (e.g. > 0.02 or 0.05).
+       - `model_prob` is above a high-confidence threshold (e.g. > 0.70).
+   - Make the thresholds configurable (e.g. via config.py).
+
+========================
+D. VALUE LEGS LOGIC (1.05–1.25 ODDS, 10–12 LEGS)
+========================
+
+1. Update `/app/services/analyzer.py` so that it:
+
+   - Fetches upcoming events + odds from the data sources.
+   - Uses the ML model to assign a probability to each leg.
+   - Calculates EV for each leg.
+   - Filters legs according to:
+       - Decimal odds between **1.05 and 1.25**.
+       - EV above the configured threshold.
+       - Model probability above the configured high-confidence threshold.
+   - Ranks legs by some combination of:
+       - Highest EV.
+       - Highest model probability.
+       - Perhaps also consider diversification across sports or events.
+
+2. Implement a function like:
+   - `get_recommended_legs_for_week(limit: int = 12)` that:
+       - Returns **10–12 recommended legs** (or fewer if not enough qualify).
+       - Each leg includes:
+           - sport
+           - event description
+           - selection name
+           - decimal odds
+           - implied probability
+           - model probability
+           - EV
+           - confidence label (e.g., HIGH / MEDIUM / LOW, but only HIGH will be returned for now).
+
+3. Make sure the `/value-bets` endpoint now:
+
+   - Uses the real analyzer pipeline.
+   - Returns these recommended legs.
+   - Still works even if some data sources fail (graceful degradation with clear error messages).
+
+========================
+E. UI & DEPLOYMENT
+========================
+
+1. Update `/app/ui/index.html` and `/app/ui/script.js` so that the frontend:
+
+   - Calls the updated `/value-bets` endpoint.
+   - Displays the 10–12 recommended legs in a clear table:
+       - Columns: sport, event, selection, odds, implied probability, model probability, EV, confidence.
+   - Shows when the data was last updated (timestamp).
+
+2. Ensure that the app is served in a way suitable for deployment:
+   - Confirm that `main.py` exposes the FastAPI app correctly.
+   - Ensure `requirements.txt` includes everything needed (fastapi, uvicorn, requests, pandas, numpy, scikit-learn, sqlalchemy, etc.).
+
+3. Provide me with clear, non-technical steps to **deploy/publish** this app publicly from Replit, using the built-in Replit hosting.
+   - I want to be able to share a public URL where the `/ui` page can be visited by anyone.
+
+========================
+GENERAL INSTRUCTIONS
+========================
+
+- I cannot code, so:
+   - Update all necessary files yourself.
+   - Keep the code clean and well-commented.
+   - After each major change, ensure the app still runs without errors.
+- Explain briefly what you changed and how to run or retrain the model.
+- If a particular external API requires an API key, show me:
+   - Where to put it (e.g., in `config.py`).
+   - How to set it securely in Replit.
+
+Start now by:
+1. Proposing specific sports data APIs and odds providers you will use.
+2. Implementing the odds + data integrations.
+3. Then wiring up the database, ML model, analyzer, UI, and deployment steps as described.
