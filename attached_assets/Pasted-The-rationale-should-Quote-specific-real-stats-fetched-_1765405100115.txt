@@ -1,0 +1,75 @@
+The rationale should:
+
+Quote specific, real stats fetched by the engine (e.g. “8 of last 10”, “+7.5 point differential”, “ranked #3 offense vs #22 defense”).
+
+Optionally mention context like:
+
+Home vs away records.
+
+Recent form.
+
+Head-to-head trends (if they support the selection).
+
+Any known narrative risk that was considered and judged acceptable.
+
+Make it clear that this is model-based analysis, not a guarantee.
+
+Ensure the /value-bets API now returns:
+
+All numeric fields (probabilities, EV, odds).
+
+The rationale text.
+
+Any confidence label (“HIGH”, and possibly “MEDIUM” internally even if not shown).
+
+========================
+F. UI & DEPLOYMENT
+
+Update /app/ui/index.html and /app/ui/script.js so that the frontend:
+
+Calls the updated /value-bets endpoint.
+
+Displays the 10–12 recommended legs in a table:
+
+Columns: sport, event, selection, odds, implied probability, model probability, EV, confidence, rationale.
+
+Shows when the data was last updated (timestamp).
+
+Optionally allows filtering by sport.
+
+Ensure the app is served in a way suitable for deployment:
+
+Confirm that main.py exposes the FastAPI app correctly.
+
+Ensure requirements.txt includes everything needed (fastapi, uvicorn, requests, pandas, numpy, scikit-learn, sqlalchemy, etc.).
+
+Provide me with clear, non-technical steps to deploy/publish this app publicly from Replit, using the built-in Replit hosting:
+
+I want to be able to share a public URL where the /ui page can be visited by anyone.
+
+========================
+GENERAL INSTRUCTIONS
+
+I cannot code, so:
+
+Update all necessary files yourself.
+
+Keep the code clean and well-commented.
+
+After each major change, ensure the app still runs without errors.
+
+Explain briefly what you changed and how to run or retrain the model.
+
+If a particular external API requires an API key, show me:
+
+Where to put it (e.g., in config.py).
+
+How to set it securely in Replit.
+
+Start now by:
+
+Proposing specific sports data APIs and odds providers you will use.
+
+Implementing the odds + data integrations.
+
+Then wiring up the database, ML model, analyzer (with the 40 → 12 pruning logic and rationales), UI, and deployment steps as described.
