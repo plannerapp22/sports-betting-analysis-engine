@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sports Betting Analysis Engine v3</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Sports Betting Analysis Engine</h1>
+            <p class="subtitle">ML-Powered High-Confidence Betting Recommendations</p>
+            <p class="version">v3.0 - Two-stage filtering with data-backed rationales</p>
+        </header>
+
+        <div class="summary-section" id="summarySection">
+            <div class="summary-card">
+                <div class="summary-item">
+                    <span class="summary-label">Markets Analyzed</span>
+                    <span class="summary-value" id="marketsAnalyzed">-</span>
+                </div>
+                <div class="summary-item">
+                    <span class="summary-label">Recommended Legs</span>
+                    <span class="summary-value" id="recommendedCount">-</span>
+                </div>
+                <div class="summary-item">
+                    <span class="summary-label">Avg Model Prob</span>
+                    <span class="summary-value" id="avgProbability">-</span>
+                </div>
+                <div class="summary-item">
+                    <span class="summary-label">Avg EV</span>
+                    <span class="summary-value" id="avgEV">-</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="filters">
+            <label for="sportFilter">Filter by Sport:</label>
+            <select id="sportFilter">
+                <option value="">All Sports</option>
+                <option value="nba">NBA</option>
+                <option value="nfl">NFL</option>
+            </select>
+            <button id="refreshBtn" class="btn">Refresh Data</button>
+            <a href="/value-picks" class="btn btn-secondary">View All Value Picks</a>
+            <span class="last-updated" id="lastUpdated"></span>
+        </div>
+
+        <section class="recommended-legs">
+            <h2>Recommended Legs This Week (1.05-1.25 odds)</h2>
+            <p class="section-desc">All qualifying high-confidence legs suitable for combining into a multi bet - pure probability analysis</p>
+            <div id="legsContainer">
+                <p class="loading">Loading recommended legs...</p>
+            </div>
+        </section>
+        
+        <footer class="disclaimer">
+            <p><strong>How to use:</strong> These recommendations identify value betting opportunities. 
+            Place these bets on your preferred Australian bookmaker (Sportsbet, TAB, Ladbrokes, Neds, Pointsbet, etc.) - 
+            all major Australian apps offer these player prop markets.</p>
+            <p><strong>Disclaimer:</strong> This is model-based analysis for informational purposes only. 
+            Past performance does not guarantee future results. Always bet responsibly within your means.</p>
+            <p class="timestamp" id="footerTimestamp"></p>
+        </footer>
+    </div>
+
+    <script src="/static/script.js"></script>
+</body>
+</html>
