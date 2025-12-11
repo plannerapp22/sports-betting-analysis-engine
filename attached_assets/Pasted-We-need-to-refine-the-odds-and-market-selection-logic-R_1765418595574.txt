@@ -1,0 +1,73 @@
+We need to refine the odds and market selection logic. Right now the engine is including speculative or unconfirmed UFC matchups like "Islam vs Belal". I only want to work with officially confirmed events, and I also want to include player prop markets for UFC and NBA, not just head-to-head.
+
+Please update the code accordingly, especially in the data source and analyzer layers.
+
+1) FILTER OUT SPECULATIVE / UNCONFIRMED MATCHUPS
+
+- In /app/data_sources/odds_api.py (and any sport-specific odds functions), update the logic that builds the list of upcoming markets (e.g. get_upcoming_markets_for_week, get_upcoming_odds, etc.) so that:
+
+  - Only events with ALL of the following are included:
+      * A valid start/commence time (not null).
+      * An event status that indicates it is officially scheduled, such as "scheduled", "open", or "confirmed".
+      * The start time is within the next 7–10 days from now (e.g. now <= start_time <= now + 10 days).
+
+  - Explicitly EXCLUDE:
+      * Futures, outrights, long-term specials.
+      * Hypothetical or tentative matchups where the API flags them as "TBD", "possible", "future matchup", etc.
+      * Any event that does not have a concrete commence time.
+
+- If the odds provider returns a field like event_status, event_type, or is_future, use that to filter:
+    * Include only "match", "game", "scheduled" type events.
+    * Exclude "futures", "outright", "special", "hypothetical" types.
+
+- For UFC specifically:
+    * Only keep fights that have an official event_id, a card date, and a confirmed start time.
+    * Drop any fights that are listed without a scheduled card date or that are clearly marked as future/rumoured matchups.
+
+- After updating these filters, ensure that get_upcoming_markets_for_week() only returns confirmed, scheduled events within the upcoming week, so speculative matchups like "Islam vs Belal" are not included.
+
+2) ADD PLAYER PROPS FOR UFC AND NBA
+
+- Extend the odds ingestion logic in /app/data_sources/odds_api.py so that, in addition to head-to-head/moneyline markets, we also bring in player/fighter props where available for:
+
+    * NBA (e.g. player points over/under, rebounds, assists).
+    * UFC (e.g. significant strikes over/under, takedowns, fight to go the distance, etc., depending on what the API exposes).
+
+- When mapping the raw API odds into our internal leg structure, add a "market_category" or "leg_type" field to distinguish:
+    * "moneyline" or "match_winner" for head-to-head.
+    * "player_prop" for NBA props.
+    * "fighter_prop" for UFC props.
+
+- Ensure that props are still:
+    * Filtered by our existing odds band (1.05 to 1.25).
+    * Passed through the same implied probability, model probability, and EV calculation pipeline.
+    * Included as candidates in the analyzer for possible selection in the 10–12 weekly legs.
+
+3) ANALYZER UPDATES (CANDIDATE FILTERING)
+
+- In /app/services/analyzer.py, update the logic that builds the candidate list of legs so that:
+
+    * It uses only the now-filtered, confirmed markets coming from odds_api (so speculative matchups are automatically excluded).
+    * It can handle both head-to-head and prop markets for UFC and NBA.
+    * For reporting and rationales, it includes enough context to explain props:
+        - For NBA props: player name, stat type (e.g. points), line, over/under.
+        - For UFC props: fighter name, prop description (e.g. "Fighter A over 2.5 takedowns").
+
+- Make sure the function that returns the final recommended 10–12 legs still:
+    * Enforces the odds band.
+    * Enforces probability/EV thresholds from config.py.
+    * Can return a mix of head-to-head and prop legs, but all based on confirmed matchups only.
+
+4) SAFETY CHECK
+
+- After making these changes:
+    * Add logging or simple debug prints (or comments) to confirm:
+        - How many raw markets are fetched per sport.
+        - How many are removed due to being futures/unconfirmed.
+        - How many props vs head-to-head legs make it into the candidate set.
+
+- Then run the app and verify that:
+    * Speculative UFC fights like "Islam vs Belal" no longer appear.
+    * You can see NBA and UFC prop legs in the /value-bets output when available.
+
+Please implement all necessary code updates across odds_api.py, sport-specific data source files, and analyzer.py, and keep the app running without errors. Explain briefly what you changed once you're done.
